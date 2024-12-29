@@ -18,6 +18,9 @@ canvas {
     /* height: 100vh; */
     justify-content: center;
     margin-top: 50px;
+    align-items: center;
+    flex-direction: column;
+    color: white;
 }
 
 .searchBar {
@@ -36,6 +39,7 @@ canvas {
     opacity: 0.8;
     transition: opacity 0.1s;
     overflow: hidden;
+
 }
 .searchBar:hover {
     opacity: 1.0;

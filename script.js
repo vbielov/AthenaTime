@@ -2,107 +2,107 @@ import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import WebGL from './vendor/WebGL.js';
+import { Sky } from './vendor/Sky.js';
 
 const noiseVertexShader = `
-precision highp float;
+    precision highp float;
 
-attribute vec2 uv;
-varying vec2 vUv;
+    attribute vec2 uv;
+    varying vec2 vUv;
 
-void main() {
-    vUv = uv;
-    gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
-}
-
+    void main() {
+        vUv = uv;
+        gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
+    }
 `;
 
 const noiseFragmentShader = `
-precision highp float;
+    precision highp float;
 
-varying vec2 vUv;
-uniform float uTime;
+    varying vec2 vUv;
+    uniform float uTime;
 
-vec2 hash2d(vec2 pos) {
-    vec2 pos2 = vec2(
-        dot(pos.xy, vec2(334.1, 781.7)),
-        dot(pos.xy, vec2(652.5, 153.3))
-    );
-    return vec2(
-        -1.0 + 3.0 * fract(sin(pos2.x) * 241.5453123),
-        -1.0 + 3.0 * fract(sin(pos2.y) * 241.5453123)
-    );
-}
+    vec2 hash2d(vec2 pos) {
+        vec2 pos2 = vec2(
+            dot(pos.xy, vec2(334.1, 781.7)),
+            dot(pos.xy, vec2(652.5, 153.3))
+        );
+        return vec2(
+            -1.0 + 3.0 * fract(sin(pos2.x) * 241.5453123),
+            -1.0 + 3.0 * fract(sin(pos2.y) * 241.5453123)
+        );
+    }
 
-float perlin(vec2 pos) {
-    vec2 i = floor(pos);
-    vec2 f = fract(pos);
-    vec2 u = f * f * (3.0 - 2.0 * f);
+    float perlin(vec2 pos) {
+        vec2 i = floor(pos);
+        vec2 f = fract(pos);
+        vec2 u = f * f * (3.0 - 2.0 * f);
 
-    float n00 = dot(hash2d(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0));
-    float n10 = dot(hash2d(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
-    float n01 = dot(hash2d(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
-    float n11 = dot(hash2d(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+        float n00 = dot(hash2d(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0));
+        float n10 = dot(hash2d(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+        float n01 = dot(hash2d(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
+        float n11 = dot(hash2d(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
 
-    float nx0 = mix(n00, n10, u.x);
-    float nx1 = mix(n01, n11, u.x);
+        float nx0 = mix(n00, n10, u.x);
+        float nx1 = mix(n01, n11, u.x);
 
-    return 0.5 + 0.5 * mix(nx0, nx1, u.y);
-}
+        return 0.5 + 0.5 * mix(nx0, nx1, u.y);
+    }
 
-void main() {
-    vec2 noisePos = vUv * 10.0 + vec2(uTime * 0.1, 0.0);
-    float noise = perlin(noisePos);
+    void main() {
+        vec2 noisePos = vUv * 10.0 + vec2(uTime * 0.1, 0.0);
+        float noise = perlin(noisePos);
 
-    // Offsets for sampling neighboring points
-    float epsilon = 0.1;
+        // Offsets for sampling neighboring points
+        float epsilon = 0.1;
 
-    // Sample nearby height values
-    float heightL = perlin(noisePos + vec2(-epsilon, 0.0)) * 0.3; // Left
-    float heightR = perlin(noisePos + vec2(epsilon, 0.0)) * 0.3;  // Right
-    float heightD = perlin(noisePos + vec2(0.0, -epsilon)) * 0.3; // Down
-    float heightU = perlin(noisePos + vec2(0.0, epsilon)) * 0.3;  // Up
+        // Sample nearby height values
+        float heightL = perlin(noisePos + vec2(-epsilon, 0.0)) * 0.3; // Left
+        float heightR = perlin(noisePos + vec2(epsilon, 0.0)) * 0.3;  // Right
+        float heightD = perlin(noisePos + vec2(0.0, -epsilon)) * 0.3; // Down
+        float heightU = perlin(noisePos + vec2(0.0, epsilon)) * 0.3;  // Up
 
-    // Create tangent vectors in the x and y directions
-    vec3 tangentX = vec3(2.0 * epsilon, 0.0, heightR - heightL);
-    vec3 tangentY = vec3(0.0, 2.0 * epsilon, heightU - heightD);
+        // Create tangent vectors in the x and y directions
+        vec3 tangentX = vec3(2.0 * epsilon, 0.0, heightR - heightL);
+        vec3 tangentY = vec3(0.0, 2.0 * epsilon, heightU - heightD);
 
-    // Compute the normal using the cross product
-    vec3 normal = normalize(cross(tangentX, tangentY));
+        // Compute the normal using the cross product
+        vec3 normal = normalize(cross(tangentX, tangentY));
 
-    gl_FragColor = vec4(normal.xyz, noise);
-}
+        gl_FragColor = vec4(normal.xyz, noise);
+    }
 `;
 
 // Inspired: https://threejs.org/examples/webgl_shaders_ocean.html
 const waterVertexShader = `
-precision highp float;
+    precision highp float;
 
-attribute vec3 position;
-attribute vec2 uv;
+    attribute vec3 position;
+    attribute vec2 uv;
 
-uniform mat4 modelMatrix;
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
-uniform sampler2D uNoiseTexture;
-uniform float uWaveHeight;
-uniform mat4 uMirrorTextureMatrix;
+    uniform mat4 modelMatrix;
+    uniform mat4 modelViewMatrix;
+    uniform mat4 projectionMatrix;
+    uniform sampler2D uNoiseTexture;
+    uniform float uWaveHeight;
+    uniform mat4 uMirrorTextureMatrix;
 
-varying vec2 vUv;
-varying vec3 vNormal;
-varying vec4 vWorldPosition;
-varying vec4 vMirrorCoord;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec4 vWorldPosition;
+    varying vec4 vMirrorCoord;
 
-void main() {
-    vUv = uv;
+    void main() {
+        vUv = uv;
 
-    vec4 noise = texture2D(uNoiseTexture, uv);
-    vNormal = noise.rgb;
-    float height = noise.a;
+        vec4 noise = texture2D(uNoiseTexture, uv);
+        vNormal = noise.rgb;
+        float height = noise.a;
 
-    vWorldPosition = modelMatrix * vec4(position.xy, height * uWaveHeight, 1.0);
-    vMirrorCoord = uMirrorTextureMatrix * vWorldPosition;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, height * uWaveHeight, 1.0);
-}
+        vWorldPosition = modelMatrix * vec4(position.xy, height * uWaveHeight, 1.0);
+        vMirrorCoord = uMirrorTextureMatrix * vWorldPosition;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, height * uWaveHeight, 1.0);
+    }
 `;
 
 const waterFragmentShader = `
@@ -179,7 +179,96 @@ const waterFragmentShader = `
     }
 `;
 
+const starsVertexShader = `
+    precision highp float;
+
+    attribute vec3 position;
+    attribute vec2 uv;
+
+    varying vec2 vUv;
+
+    uniform mat4 modelViewMatrix;
+    uniform mat4 projectionMatrix;
+
+    void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xyz, 1.0);
+    }
+`;
+
+const starsFragmentShader = `
+    precision highp float;
+
+    varying vec2 vUv;
+
+    uniform float uAlpha;
+
+    float random(vec2 p) {
+        return fract(sin(dot(p ,vec2(12.9898,78.233))) * 43758.5453);
+    }
+
+    float voronoi(vec2 p) {
+        vec2 grid = floor(p);
+        vec2 f = fract(p);
+        float minDist = 1.0;
+        
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                vec2 seed = vec2(i, j) + grid; 
+                vec2 r = vec2(random(seed), random(seed + vec2(1.0, 0.0)));
+                
+                vec2 offset = r - f;
+                float dist = length(offset);
+                
+                minDist = min(minDist, dist);
+            }
+        }
+        
+        return minDist;
+    }
+
+    void main() {
+        vec2 p = vUv;
+        p *= 20.0; // density of stars
+
+        float dist = voronoi(p);
+        vec3 color = vec3(dist);
+
+        vec3 stars = clamp(color, 0.0, 1.0);
+        stars = vec3(1.0, 1.0, 1.0) - stars;
+        stars = pow(stars, vec3(100.0));
+
+        float alpha = pow(stars.r, 3.0) * 30.0 * (2.0 * vUv.y - 1.0); // fade out stars towards the horizon
+        if(stars.r < 0.75) {
+            alpha = 0.0;
+        }
+        gl_FragColor = vec4(stars, alpha * uAlpha);
+    }
+`;
+
 const scene = new THREE.Scene();
+
+// Stars
+const starsGeometry = new THREE.SphereGeometry(500, 64, 64);
+const starsMaterial = new THREE.RawShaderMaterial({
+    uniforms: {
+        uAlpha: { value: 1.0 },
+    },
+    vertexShader: starsVertexShader,
+    fragmentShader: starsFragmentShader,
+    side: THREE.BackSide,
+    transparent: true,
+});
+
+const stars = new THREE.Mesh(starsGeometry, starsMaterial);
+scene.add(stars);
+
+// Sky
+const sky = new Sky();
+sky.scale.setScalar( 10000 );
+scene.add( sky );
+sky.material.uniforms['sunPosition'].value = new THREE.Vector3(0, 1, 0);
+
 
 const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
 camera.position.z = 5;
@@ -197,7 +286,7 @@ const uniforms = {
     uTime: { value: 0.0 },
     uNoiseTexture: { value: noiseRenderTarget.texture },
     uCameraPosition: { value: new THREE.Vector3(0, 0, 0) },
-    uSunDirection: { value: new THREE.Vector3(0.70707, 0.15, 0.0) },
+    uSunDirection: { value: new THREE.Vector3(0.70707, 0.85, 0.0) },
     uSunColor: { value: new THREE.Color(0xFEEDE6) },
     uWaterColor: { value: new THREE.Vector4(0x73 / 255, 0x83 / 255, 0xA0 / 255, 1.0) },
     uWaveHeight: { value: 5.0 },
@@ -238,10 +327,9 @@ waterPlane.rotation.x = Math.PI + Math.PI / 2;
 scene.add(waterPlane);
 
 // Light
-const ambientLight = new THREE.AmbientLight(0xD3BFCB, 2.0);
+const ambientLight = new THREE.AmbientLight(0xD3BFCB, 0.5);
 scene.add(ambientLight);
 let sunLight = new THREE.DirectionalLight(0xFEEDE6, 5);
-sunLight.position.set(uniforms.uSunDirection.value.x, uniforms.uSunDirection.value.y, uniforms.uSunDirection.value.z);
 scene.add(sunLight);
 
 // Boat
@@ -299,8 +387,8 @@ function getNormalPlane(planePoints) {
 const sunGeomatry = new THREE.SphereGeometry(10.0, 32, 32);
 const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
 const sun = new THREE.Mesh(sunGeomatry, sunMaterial);
-sun.position.set(uniforms.uSunDirection.value.x * 1000, uniforms.uSunDirection.value.y * 1000, uniforms.uSunDirection.value.z * 1000);
-scene.add(sun);
+
+// scene.add(sun);
 
 function createMirrorCamera() {
     let mirrorWorldPosition = new THREE.Vector3(0, 0, 0).setFromMatrixPosition(waterPlane.matrixWorld);
@@ -344,6 +432,38 @@ function createMirrorCamera() {
     return mirrorCamera;
 }
 
+function getSunPosition(date) {
+    // Assume we have methods to get exact times of sunrise and sunset for a given date
+    let sunrise = new Date(date.getTime());
+    sunrise.setHours(8, 0, 0);
+    sunrise = sunrise.getTime();
+    let sunset = new Date(date.getTime());  
+    sunset.setHours(16, 30, 0);
+    sunset = sunset.getTime();
+
+    const now = date.getTime();
+    const timeOfDay = (now - sunrise) / (sunset - sunrise);
+    const normalizedTime = timeOfDay;
+    const radius = 100;
+    const angle = normalizedTime * Math.PI;
+
+    const x = radius * Math.cos(angle);
+    const z = radius * Math.sin(angle);
+    const y = Math.sin(angle) * radius * 0.5;
+
+    return new THREE.Vector3(x, y, z);
+}
+
+function getLightIntensity(date) {
+    const groundNormal = new THREE.Vector3(0, 1, 0);
+    const sunDirection = getSunPosition(date).normalize();
+    const dotProduct = sunDirection.dot(groundNormal);
+    const intensity = Math.max(dotProduct, 0);
+    return intensity * 5;
+}
+
+let date = new Date();
+const timeText = document.getElementById("timeText");
 function animate() {
     if(boat != null) {
         renderer.setRenderTarget(noiseRenderTarget);
@@ -405,6 +525,22 @@ function animate() {
         uniforms.uWaveHeight.value = 5.0;
         uniforms.uCameraPosition.value = new THREE.Vector3(0, 0, 0).setFromMatrixPosition(camera.matrixWorld);;
         
+        // Update sun
+        date = new Date(date.getTime() + 100000);
+        timeText.innerText = date.toLocaleTimeString();
+        uniforms.uSunDirection.value = getSunPosition(date).normalize();
+        sky.material.uniforms.sunPosition.value.copy(uniforms.uSunDirection.value);
+        sky.material.uniforms.turbidity.value = 1.0;
+        sky.material.uniforms.rayleigh.value = 0.5;
+        sky.material.uniforms.mieCoefficient.value = 0.0025;
+        sky.material.uniforms.mieDirectionalG.value = 0.3;
+        sun.position.copy(uniforms.uSunDirection.value);
+        sun.position.multiplyScalar(100);
+        sunLight.position.copy(uniforms.uSunDirection.value);
+        sunLight.color = new THREE.Color(0xFEEDE6);
+        sunLight.intensity = getLightIntensity(date);
+        starsMaterial.uniforms.uAlpha.value = Math.max(1 - sunLight.intensity, 0.0);
+
         let mirrorCamera = createMirrorCamera();
         if(mirrorCamera != null) {
             uniforms.uMirrorTextureMatrix.value.set(
