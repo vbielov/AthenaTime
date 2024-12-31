@@ -202,6 +202,7 @@ const starsFragmentShader = `
     varying vec2 vUv;
 
     uniform float uAlpha;
+    uniform float uTime;
 
     float random(vec2 p) {
         return fract(sin(dot(p ,vec2(12.9898,78.233))) * 43758.5453);
@@ -230,6 +231,8 @@ const starsFragmentShader = `
     void main() {
         vec2 p = vUv;
         p *= 20.0; // density of stars
+        // rotate p vector with time to make stars go around the sky
+        p = vec2(p.x * cos(uTime * 0.05) - p.y * sin(uTime * 0.05), p.x * sin(uTime * 0.05) + p.y * cos(uTime * 0.05));
 
         float dist = voronoi(p);
         vec3 color = vec3(dist);
@@ -253,6 +256,7 @@ const starsGeometry = new THREE.SphereGeometry(500, 64, 64);
 const starsMaterial = new THREE.RawShaderMaterial({
     uniforms: {
         uAlpha: { value: 1.0 },
+        uTime: { value: 0.0 },
     },
     vertexShader: starsVertexShader,
     fragmentShader: starsFragmentShader,
@@ -261,6 +265,7 @@ const starsMaterial = new THREE.RawShaderMaterial({
 });
 
 const stars = new THREE.Mesh(starsGeometry, starsMaterial);
+stars.rotation.y = Math.PI / 2;
 scene.add(stars);
 
 // Sky
@@ -273,8 +278,9 @@ sky.material.uniforms['sunPosition'].value = new THREE.Vector3(0, 1, 0);
 const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
 camera.position.z = 5;
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true});
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, depthTest: true});
 const controls = new OrbitControls( camera, renderer.domElement );
+controls.enabled = false;
 
 renderer.setSize( window.innerWidth, window.innerHeight );
 document.body.appendChild( renderer.domElement );
@@ -290,7 +296,7 @@ const uniforms = {
     uSunColor: { value: new THREE.Color(0xFEEDE6) },
     uWaterColor: { value: new THREE.Vector4(0x73 / 255, 0x83 / 255, 0xA0 / 255, 1.0) },
     uWaveHeight: { value: 5.0 },
-    uWaveTexture: { value: new THREE.TextureLoader().load("resources/waternormals.jpg") },
+    uWaveTexture: { value: new THREE.TextureLoader().load("resources/textures/waternormals.jpg") },
     uMirrorTexture: { value: mirrorRenderTarget.texture },
     uMirrorTextureMatrix: { value: new THREE.Matrix4() },
 };
@@ -334,10 +340,28 @@ scene.add(sunLight);
 
 // Boat
 var boat = null;
+const achorLight = new THREE.PointLight(0xFEEDE6, 1, 100);
+achorLight.position.set(0, 2, 0);
 const loader = new GLTFLoader();
-loader.load("resources/scene.glb", function(gltf) {
+loader.load("resources/athena.glb", function(gltf) {
+
+    gltf.scene.traverse(function (child) {
+        if (child.isMesh) {
+            child.material.flatShading = false;
+            child.material.depthTest = true;
+            child.material.depthWrite = true;
+            child.material.transparent = true;
+            child.material.needsUpdate = true;
+        }
+    });
+
     boat = gltf.scene.children[0];
+
+
+    boat.add(achorLight);
+
     scene.add(boat);
+
 }, undefined, function(error) {
     console.error(error);
 });
@@ -464,6 +488,39 @@ function getLightIntensity(date) {
 
 let date = new Date();
 const timeText = document.getElementById("timeText");
+const welcomeMessage = document.getElementById("welcomeMessage");
+const weekDay = document.getElementById("weekDay");
+function updateText() {
+    let hours = date.getHours();
+    let minutes = date.getMinutes();
+    let day = date.getDate();
+    let month = date.getMonth();
+    let dayOfTheWeek = date.getDay();
+    let weekDays = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+    let months = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+    let welcomeMessages = ["Guten Morgen", "Guten Tag", "Guten Abend", "Gute Nacht"];
+    
+
+    let time = hours + " : " + minutes;
+    let dayText = weekDays[dayOfTheWeek] + ", " + day + " " + months[month];
+    timeText.innerText = time;
+    weekDay.innerText = dayText;
+
+    let welcomeMessageIndex = 0;
+    if(hours >= 6 && hours < 12) {
+        welcomeMessageIndex = 0;
+    } else if(hours >= 12 && hours < 18) {
+        welcomeMessageIndex = 1;
+    } else if(hours >= 18 && hours < 24) {
+        welcomeMessageIndex = 2;
+    } else {
+        welcomeMessageIndex = 3;
+    }
+
+    welcomeMessage.innerText = welcomeMessages[welcomeMessageIndex];
+
+}
+
 function animate() {
     if(boat != null) {
         renderer.setRenderTarget(noiseRenderTarget);
@@ -522,12 +579,18 @@ function animate() {
         // line.geometry.setFromPoints([new THREE.Vector3(0, getHeight(centerX, centerZ), 0), new THREE.Vector3(0, getHeight(centerX, centerZ), 0).add(new THREE.Vector3(normal.x * 20, normal.y * 20, normal.z * 20))]);
 
         uniforms.uTime.value += 0.01;
+        starsMaterial.uniforms.uTime.value += 0.0005;
         uniforms.uWaveHeight.value = 5.0;
         uniforms.uCameraPosition.value = new THREE.Vector3(0, 0, 0).setFromMatrixPosition(camera.matrixWorld);;
         
         // Update sun
-        date = new Date(date.getTime() + 100000);
-        timeText.innerText = date.toLocaleTimeString();
+        if(window.speedUp != undefined && window.speedUp === true) {
+            date = new Date(date.getTime() + 100000);
+        }
+        else {
+            date = new Date();
+        }
+        updateText();
         uniforms.uSunDirection.value = getSunPosition(date).normalize();
         sky.material.uniforms.sunPosition.value.copy(uniforms.uSunDirection.value);
         sky.material.uniforms.turbidity.value = 1.0;
@@ -539,8 +602,9 @@ function animate() {
         sunLight.position.copy(uniforms.uSunDirection.value);
         sunLight.color = new THREE.Color(0xFEEDE6);
         sunLight.intensity = getLightIntensity(date);
+        achorLight.intensity = Math.max(1 - sunLight.intensity, 0);
         starsMaterial.uniforms.uAlpha.value = Math.max(1 - sunLight.intensity, 0.0);
-
+        
         let mirrorCamera = createMirrorCamera();
         if(mirrorCamera != null) {
             uniforms.uMirrorTextureMatrix.value.set(
@@ -561,10 +625,21 @@ function animate() {
         scene.add(waterPlane);
         renderer.render(scene, camera);
 
-        // camera.position.set(-1.5784, 5.6844, 7.5588);
-        // camera.rotation.set(-0.3786, -0.4076, -0.1564);
+        if(!controls.enabled) {
+            camera.position.set(3.8175, 4.181847, 2.422425);
+            camera.rotation.set(0.0512966, 0.85585, -0.0387234);
+        }
     }
-} 
+}
+
+window.addEventListener("keydown", function(event) {
+    if(event.key === "c") {
+        controls.enabled = !controls.enabled;
+        controls.reset();
+        controls.position0.set(3.8175, 4.181847, 2.422425);
+        controls.target0.set(0, 0, 0);
+    }
+});
 
 function resize() {
     var factor = 1; // percentage of the screen
@@ -576,7 +651,6 @@ function resize() {
 }; 
 
 window.addEventListener("resize", resize);
-
 
 if(WebGL.isWebGL2Available()) {
 	renderer.setAnimationLoop( animate );

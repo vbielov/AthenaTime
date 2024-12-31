@@ -15,7 +15,6 @@ canvas {
     left: 0;
     display: flex;
     width: 100vw;
-    /* height: 100vh; */
     justify-content: center;
     margin-top: 50px;
     align-items: center;
@@ -76,3 +75,18 @@ button {
 .barButton:hover {
     padding-left: 20px
 }
+
+/* SeaweedScript-Regular.woff2 */
+@font-face {
+    font-family: 'SeaweedScript';
+    src: url('./resources/SeaweedScript-Regular.woff2') format('woff2');
+}
+
+h3 {
+    font-family: 'SeaweedScript';
+    font-size: 48px;
+    font-weight: 400;
+    margin: 5px;
+    padding: 0px;
+}
+
