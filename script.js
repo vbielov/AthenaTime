@@ -3,6 +3,7 @@ import { OrbitControls } from './vendor/OrbitControls.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import WebGL from './vendor/WebGL.js';
 import { Sky } from './vendor/Sky.js';
+import Stats from './vendor/stats.module.js'
 
 const noiseVertexShader = `
     precision highp float;
@@ -376,23 +377,24 @@ loader.load("resources/athena.glb", function(gltf) {
 //     console.error(error);
 // });
 
-let pixels = new Uint8Array(noiseRenderTarget.width * noiseRenderTarget.height * 4);
 
-function getHeight(x, z) {
-    return pixels[(z * noiseRenderTarget.width + x) * 4 + 3] / 255 * uniforms.uWaveHeight.value;
+function getHeight(x, z, pixels, width) {
+    // return pixels[(z * noiseRenderTarget.width + x) * 4 + 3] / 255 * uniforms.uWaveHeight.value;
+    return pixels[(z * width + x) * 4 + 3] / 255 * uniforms.uWaveHeight.value;
 }
 
 function getHeightPlane(planePoints) {
     let sum = 0;
     for(let i = 0; i < planePoints.length; i++) {
-        sum += getHeight(planePoints[i].x, planePoints[i].z);
+        // sum += getHeight(planePoints[i].x, planePoints[i].z, pixels);
+        sum += planePoints[i].y;
     }
     return sum / planePoints.length;
 }
 
-function getNormal(x, z) {
-    let dx = getHeight(x + 1, z) - getHeight(x, z);
-    let dy = getHeight(x, z + 1) - getHeight(x, z);
+function getNormal(x, z, pixels, width) {
+    let dx = getHeight(x + 1, z, pixels, width) - getHeight(x, z, pixels, width);
+    let dy = getHeight(x, z + 1, pixels, width) - getHeight(x, z, pixels, width);
     return new THREE.Vector3(-dx, 2, dy).normalize();
 }
 
@@ -518,15 +520,15 @@ function updateText() {
     }
 
     welcomeMessage.innerText = welcomeMessages[welcomeMessageIndex];
-
 }
 
 function animate() {
+    stats.begin();
     if(boat != null) {
         renderer.setRenderTarget(noiseRenderTarget);
         renderer.render(noiseScene, camera, noiseRenderTarget);
 
-        renderer.readRenderTargetPixels(noiseRenderTarget, 0, 0, noiseRenderTarget.width, noiseRenderTarget.height, pixels);
+        // renderer.readRenderTargetPixels(noiseRenderTarget, 0, 0, noiseRenderTarget.width, noiseRenderTarget.height, pixels);
         let centerX = Math.round(noiseRenderTarget.width / 2);
         let centerZ = Math.round(noiseRenderTarget.height / 2);
 
@@ -542,6 +544,12 @@ function animate() {
             new THREE.Vector3(max.x, min.y, max.z), // Bottom-front (max x, max z)
         ];
 
+        // it can happen that width of that box is too small, so I extend it.
+        bottomPlanePoints[2].x += 1.0;
+        bottomPlanePoints[3].x += 1.0;
+        bottomPlanePoints[1].z += 1.0;
+        bottomPlanePoints[3].z += 1.0;
+
         // Project the points onto the water plane pixels
         for (let i = 0; i < bottomPlanePoints.length; i++) {
             bottomPlanePoints[i].multiplyScalar(noiseRenderTarget.width / planeGeometry.parameters.width).add(new THREE.Vector3(centerX, 0, centerZ));
@@ -553,9 +561,21 @@ function animate() {
             bottomPlanePoints[i].z = Math.round(bottomPlanePoints[i].z);
         }
 
+        let minX = 10e9, maxX = -10e9;
+        let minZ = 10e9, maxZ = -10e9;
+        for(let i = 0; i < bottomPlanePoints.length; i++) {
+            minX = Math.min(minX, bottomPlanePoints[i].x);
+            maxX = Math.max(maxX, bottomPlanePoints[i].x);
+            minZ = Math.min(minZ, bottomPlanePoints[i].z);
+            maxZ = Math.max(maxZ, bottomPlanePoints[i].z);
+        }
+
+        var pixels = new Uint8Array((maxX-minX+3) * (maxZ-minZ+3) * 4);
+        renderer.readRenderTargetPixels(noiseRenderTarget, minX - 1, minZ - 1, maxX-minX + 1, maxZ-minZ + 1, pixels);
+
         // Find hight on texture
         for(let i = 0; i < bottomPlanePoints.length; i++) {
-            bottomPlanePoints[i].y = getHeight(bottomPlanePoints[i].x, bottomPlanePoints[i].z) * 2; // lol magic number
+            bottomPlanePoints[i].y = getHeight(bottomPlanePoints[i].x - minX, bottomPlanePoints[i].z - minZ, pixels, maxX-minX); // lol magic number
         }
 
         let normal = getNormalPlane(bottomPlanePoints);
@@ -580,7 +600,6 @@ function animate() {
 
         uniforms.uTime.value += 0.01;
         starsMaterial.uniforms.uTime.value += 0.0005;
-        uniforms.uWaveHeight.value = 5.0;
         uniforms.uCameraPosition.value = new THREE.Vector3(0, 0, 0).setFromMatrixPosition(camera.matrixWorld);;
         
         // Update sun
@@ -630,6 +649,7 @@ function animate() {
             camera.rotation.set(0.0512966, 0.85585, -0.0387234);
         }
     }
+    stats.end();
 }
 
 window.addEventListener("keydown", function(event) {
@@ -659,3 +679,7 @@ if(WebGL.isWebGL2Available()) {
 	document.getElementById('container').appendChild( warning );
 }
 
+// Debugging
+// const stats = new Stats()
+// stats.showPanel(0) // 0: fps, 1: ms, 2: mb, 3+: custom
+// document.body.appendChild(stats.dom)
