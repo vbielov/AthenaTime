@@ -523,7 +523,7 @@ function updateText() {
 }
 
 function animate() {
-    stats.begin();
+    // stats.begin();
     if(boat != null) {
         renderer.setRenderTarget(noiseRenderTarget);
         renderer.render(noiseScene, camera, noiseRenderTarget);
@@ -649,7 +649,7 @@ function animate() {
             camera.rotation.set(0.0512966, 0.85585, -0.0387234);
         }
     }
-    stats.end();
+    // stats.end();
 }
 
 window.addEventListener("keydown", function(event) {
@@ -679,7 +679,7 @@ if(WebGL.isWebGL2Available()) {
 	document.getElementById('container').appendChild( warning );
 }
 
-// Debugging
+// Debugging (don't forget to uncomment stats.begin() and stats.end())
 // const stats = new Stats()
 // stats.showPanel(0) // 0: fps, 1: ms, 2: mb, 3+: custom
 // document.body.appendChild(stats.dom)
